@@ -8,18 +8,21 @@ A browser-based clinical reasoning game about acute stroke recognition, built ar
 
 You're at the bedside of a patient with a sudden change. Starting from a single node, you expand a live "mind map" of the encounter:
 
-1. **Tap a node** to act — talk to the patient or family, perform a focused exam maneuver, or run a bedside test.
-2. Each action reveals **new nodes** branching off it, and many produce a **clinical finding**.
-3. In **Collected Data**, tag each finding to the BEFAST category it documents. Wrong tags get gentle pushback; supporting data (vitals, history, mimic rule-outs) is filed automatically.
+1. **Tap a node** to act — talk to the patient, perform a focused exam maneuver, or run a bedside test.
+2. Each action reveals **new nodes** branching off it, and most produce a **clinical finding**.
+3. In **Collected Data**, tag any finding to a BEFAST category. A tag only **counts** when it's right; tag the wrong data — or the right data to the wrong letter — and it's marked **incorrect** with feedback (and you can retag).
 4. When your documentation is strong enough, trigger the **STROKE ALERT**. Activate too early and the stroke team pushes back with specific feedback on what's missing — every node stays revisitable, so keep digging.
 
-To accept an activation you need:
+The bundled case ("The Vision That Wasn't There") is a young patient whose only deficit is a right homonymous hemianopia — the kind of posterior-circulation stroke a plain FAST screen misses. Watch for the trap: the patient "bumps into things," but his balance is intact — that's an **Eyes** finding, not **Balance**.
 
-- A tagged **Time** (last known well) data point
-- At least **two** objective BEFAST deficits (B/E/F/A/S)
-- The most common stroke mimic ruled out (you'll figure it out)
+To accept an activation in this case you need:
 
-Findings use realistic clinical language (NIHSS-style exam descriptions), aimed at nursing, EMS, and medical learners.
+- A correctly tagged **Time** (last known well)
+- At least **one** correctly tagged BEFAST deficit (here, **Eyes**)
+- No incorrect tags left standing
+- The visual field defect confirmed objectively at the bedside
+
+Findings use realistic clinical language, aimed at nursing, EMS, and medical learners.
 
 ## Tech
 

@@ -470,6 +470,11 @@
           : `<div class="tag-feedback incorrect">${tagFeedbackText(f, L)}</div>`) +
         `<div class="tag-prompt">${correct ? 'Change tag:' : 'Try again:'}</div>`;
       appendTagRow(card, id);
+      const clear = document.createElement('button');
+      clear.className = 'untag-btn';
+      clear.textContent = '✕ Untag';
+      clear.addEventListener('click', () => clearTag(id));
+      card.appendChild(clear);
       taggedEl.appendChild(card);
     });
   }
@@ -479,6 +484,15 @@
       return 'This is supporting data — it does not document a BEFAST deficit.';
     }
     return `This finding documents ${BEFAST[finding.befast].word} (${finding.befast}), not ${BEFAST[letter].word}.`;
+  }
+
+  function clearTag(findingId) {
+    delete state.tags[findingId];
+    toast('Tag removed — finding returned to untagged.');
+    renderTracker();
+    renderData();
+    renderMap();
+    if (state.selectedNode) renderPanel(state.selectedNode, false);
   }
 
   function tryTag(findingId, letter) {
@@ -507,19 +521,23 @@
     const deficits = LETTERS.filter((L) => L !== 'T' && tagged.has(L));
     const problems = [];
     const wrongTags = incorrectTagCount();
+    const prompts = CASE.alert.prompts || {};
 
-    if (!tagged.has('T')) {
-      problems.push('No <b>Time</b> evidence — a stroke alert without a last-known-well time can\'t drive treatment decisions. Someone witnessed the onset…');
-    }
+    (CASE.alert.requiredLetters || []).forEach((L) => {
+      if (!tagged.has(L)) {
+        problems.push(prompts[L] || `You haven\'t correctly tagged a <b>${BEFAST[L].word}</b> (${L}) finding.`);
+      }
+    });
     if (deficits.length < CASE.alert.minDeficits) {
-      problems.push(`Only <b>${deficits.length}</b> BEFAST deficit${deficits.length === 1 ? '' : 's'} correctly tagged (${deficits.join(', ') || 'none'}) — document at least <b>${CASE.alert.minDeficits}</b> objective deficits (B/E/F/A/S) to justify activation.`);
+      problems.push(prompts.deficits || `Only <b>${deficits.length}</b> BEFAST deficit${deficits.length === 1 ? '' : 's'} correctly tagged (${deficits.join(', ') || 'none'}) — document at least <b>${CASE.alert.minDeficits}</b> objective deficit${CASE.alert.minDeficits === 1 ? '' : 's'} (B/E/F/A/S) to justify activation.`);
     }
     if (wrongTags) {
       problems.push(`You have <b>${wrongTags}</b> incorrect BEFAST tag${wrongTags === 1 ? '' : 's'} — only correctly tagged evidence counts toward activation.`);
     }
-    CASE.alert.requiredNodes.forEach((nid) => {
+    (CASE.alert.requiredNodes || []).forEach((nid) => {
       if (!state.discovered.has(nid)) {
-        problems.push(`You haven\'t excluded the most common stroke mimic. There\'s a ten-second bedside test for it (<b>${CASE.nodes[nid].title}</b>).`);
+        const nodePrompt = prompts.nodes && prompts.nodes[nid];
+        problems.push(nodePrompt || `You still need to perform <b>${CASE.nodes[nid].title}</b> before activating.`);
       }
     });
     const untaggedCount = state.findings.filter((id) => !state.tags[id]).length;

@@ -340,6 +340,19 @@ body { display: flex; flex-direction: column; }
 .tag-prompt { font-size: 12px; color: var(--amber); margin-top: 9px; }
 .tag-feedback { font-size: 12px; margin-top: 8px; line-height: 1.45; }
 .tag-feedback.incorrect { color: var(--red); }
+
+.untag-btn {
+  margin-top: 8px;
+  padding: 5px 12px;
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  cursor: pointer;
+}
+.untag-btn:hover { color: var(--text); border-color: var(--text-dim); }
 .tag-row { display: flex; gap: 6px; margin-top: 8px; }
 .tag-btn {
   flex: 1;
