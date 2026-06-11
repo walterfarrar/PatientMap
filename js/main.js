@@ -28,7 +28,7 @@
     discovered: new Set(),   // visited nodes
     unlocked: new Set(),     // visible frontier (clickable, not yet visited)
     findings: [],            // finding ids in collection order
-    tags: {},                // findingId -> letter (correct tags only)
+    tags: {},                // findingId -> letter (any tag; check correctness separately)
     selectedNode: null,
     alerted: false,
   };
@@ -81,7 +81,6 @@
   const trackerEl = document.getElementById('befast-tracker');
   const untaggedEl = document.getElementById('findings-untagged');
   const taggedEl = document.getElementById('findings-tagged');
-  const supportingEl = document.getElementById('findings-supporting');
   const dataCountEl = document.getElementById('data-count');
   const alertBtn = document.getElementById('stroke-alert-btn');
   const toastEl = document.getElementById('toast');
@@ -234,7 +233,9 @@
       const g = document.createElementNS(SVG_NS, 'g');
       let cls = `node ${TYPE_CLASS[node.type]} ${isDiscovered ? 'discovered' : 'locked'}`;
       if (state.selectedNode === id) cls += ' selected';
-      if (node.finding && state.tags[node.finding.id]) cls += ' tagged';
+      if (node.finding && state.tags[node.finding.id]) {
+        cls += isTagCorrect(node.finding.id, state.tags[node.finding.id]) ? ' tagged' : ' tagged-wrong';
+      }
       g.setAttribute('class', cls);
       g.setAttribute('transform', `translate(${pos.x}, ${pos.y})`);
 
@@ -268,8 +269,9 @@
       g.appendChild(label);
 
       if (node.finding && state.tags[node.finding.id]) {
+        const tagLetter = state.tags[node.finding.id];
         const badge = document.createElementNS(SVG_NS, 'g');
-        badge.setAttribute('class', 'node-badge');
+        badge.setAttribute('class', 'node-badge' + (isTagCorrect(node.finding.id, tagLetter) ? '' : ' incorrect'));
         badge.setAttribute('transform', 'translate(24, -24)');
         const bc = document.createElementNS(SVG_NS, 'circle');
         bc.setAttribute('r', 11);
@@ -277,7 +279,7 @@
         const bt = document.createElementNS(SVG_NS, 'text');
         bt.setAttribute('text-anchor', 'middle');
         bt.setAttribute('dominant-baseline', 'central');
-        bt.textContent = state.tags[node.finding.id];
+        bt.textContent = tagLetter;
         badge.appendChild(bt);
         g.appendChild(badge);
       }
@@ -300,11 +302,7 @@
       });
       if (node.finding && !state.findings.includes(node.finding.id)) {
         state.findings.push(node.finding.id);
-        if (node.finding.befast) {
-          toast(`New finding collected — tag it in Collected Data.`);
-        } else {
-          toast(`Supporting data filed.`);
-        }
+        toast(`New finding collected — tag it in Collected Data.`);
       }
     }
     state.selectedNode = id;
@@ -340,15 +338,16 @@
       const f = node.finding;
       const card = document.createElement('div');
       const letter = state.tags[f.id];
-      card.className = 'inline-finding' + (f.befast ? '' : ' supporting');
+      const correct = letter && isTagCorrect(f.id, letter);
+      card.className = 'inline-finding' + (letter && !correct ? ' incorrect-tag' : '');
       card.innerHTML =
         `<div class="finding-title">📎 Finding: ${f.label}</div>` +
         `<div class="finding-detail">${f.detail}</div>` +
-        (f.befast
-          ? (letter
-            ? `<div class="finding-tagged-as">Tagged: <b>${letter}</b> — ${BEFAST[letter].word}</div>`
-            : `<div class="finding-hint">Open <b>Collected Data</b> to tag this to a BEFAST category.</div>`)
-          : `<div class="finding-hint">Filed under supporting data.</div>`);
+        (letter
+          ? (correct
+            ? `<div class="finding-tagged-as">✓ Tagged: <b>${letter}</b> — ${BEFAST[letter].word}</div>`
+            : `<div class="finding-tagged-as incorrect">✗ Incorrect tag: <b>${letter}</b> — ${BEFAST[letter].word}</div>`)
+          : `<div class="finding-hint">Open <b>Collected Data</b> to tag this to a BEFAST category.</div>`);
       frag.appendChild(card);
     }
 
@@ -383,12 +382,28 @@
 
   /* ----------------------------- BEFAST data ---------------------------- */
 
-  function taggedLetters() {
-    return new Set(Object.values(state.tags));
+  function isTagCorrect(findingId, letter) {
+    return findingById[findingId].befast === letter;
+  }
+
+  function correctTaggedLetters() {
+    const letters = new Set();
+    state.findings.forEach((id) => {
+      const letter = state.tags[id];
+      if (letter && isTagCorrect(id, letter)) letters.add(letter);
+    });
+    return letters;
+  }
+
+  function incorrectTagCount() {
+    return state.findings.filter((id) => {
+      const letter = state.tags[id];
+      return letter && !isTagCorrect(id, letter);
+    }).length;
   }
 
   function renderTracker() {
-    const tagged = taggedLetters();
+    const tagged = correctTaggedLetters();
     trackerEl.innerHTML = '';
     LETTERS.forEach((L) => {
       const slot = document.createElement('div');
@@ -399,13 +414,26 @@
     });
   }
 
+  function appendTagRow(card, findingId) {
+    const row = document.createElement('div');
+    row.className = 'tag-row';
+    LETTERS.forEach((L) => {
+      const b = document.createElement('button');
+      b.className = 'tag-btn';
+      b.textContent = L;
+      b.title = BEFAST[L].word;
+      b.addEventListener('click', () => tryTag(findingId, L));
+      row.appendChild(b);
+    });
+    card.appendChild(row);
+  }
+
   function renderData() {
-    const untagged = state.findings.filter((id) => findingById[id].befast && !state.tags[id]);
+    const untagged = state.findings.filter((id) => !state.tags[id]);
     const tagged = state.findings.filter((id) => state.tags[id]);
-    const supporting = state.findings.filter((id) => !findingById[id].befast);
 
     dataCountEl.textContent = state.findings.length ? `(${state.findings.length})` : '';
-    if (untagged.length) {
+    if (untagged.length || incorrectTagCount()) {
       dataCountEl.textContent += ' •';
       dataCountEl.classList.add('attention');
     } else {
@@ -420,57 +448,54 @@
       card.innerHTML = `<div class="finding-title">${f.label}</div>` +
         `<div class="finding-detail">${f.detail}</div>` +
         `<div class="tag-prompt">Which BEFAST category does this support?</div>`;
-      const row = document.createElement('div');
-      row.className = 'tag-row';
-      LETTERS.forEach((L) => {
-        const b = document.createElement('button');
-        b.className = 'tag-btn';
-        b.textContent = L;
-        b.title = BEFAST[L].word;
-        b.addEventListener('click', () => tryTag(id, L, card));
-        row.appendChild(b);
-      });
-      card.appendChild(row);
+      appendTagRow(card, id);
       untaggedEl.appendChild(card);
     });
 
-    taggedEl.innerHTML = tagged.length ? '' : '<p class="panel-empty">No evidence tagged yet.</p>';
+    taggedEl.innerHTML = tagged.length ? '' : '<p class="panel-empty">No tags yet.</p>';
     tagged.forEach((id) => {
       const f = findingById[id];
       const L = state.tags[id];
+      const correct = isTagCorrect(id, L);
       const card = document.createElement('div');
-      card.className = 'finding-card tagged';
-      card.innerHTML = `<span class="tag-chip">${L} · ${BEFAST[L].word}</span>` +
+      card.className = 'finding-card tagged ' + (correct ? 'correct' : 'incorrect');
+      card.innerHTML =
+        `<span class="tag-chip ${correct ? 'correct' : 'incorrect'}">` +
+        `${correct ? '✓' : '✗'} ${L} · ${BEFAST[L].word}` +
+        `</span>` +
         `<div class="finding-title">${f.label}</div>` +
-        `<div class="finding-detail">${f.detail}</div>`;
+        `<div class="finding-detail">${f.detail}</div>` +
+        (correct
+          ? ''
+          : `<div class="tag-feedback incorrect">${tagFeedbackText(f, L)}</div>`) +
+        `<div class="tag-prompt">${correct ? 'Change tag:' : 'Try again:'}</div>`;
+      appendTagRow(card, id);
       taggedEl.appendChild(card);
-    });
-
-    supportingEl.innerHTML = supporting.length ? '' : '<p class="panel-empty">No supporting data yet.</p>';
-    supporting.forEach((id) => {
-      const f = findingById[id];
-      const card = document.createElement('div');
-      card.className = 'finding-card supporting';
-      card.innerHTML = `<div class="finding-title">${f.label}</div>` +
-        `<div class="finding-detail">${f.detail}</div>`;
-      supportingEl.appendChild(card);
     });
   }
 
-  function tryTag(findingId, letter, cardEl) {
-    const f = findingById[findingId];
-    if (letter === f.befast) {
-      state.tags[findingId] = letter;
-      toast(`✓ Tagged to ${letter} — ${BEFAST[letter].word}.`, 'good');
-      renderTracker();
-      renderData();
-      renderMap();
-    } else {
-      cardEl.classList.remove('shake');
-      void cardEl.offsetWidth; // restart animation
-      cardEl.classList.add('shake');
-      toast(`That finding doesn't document "${BEFAST[letter].word}". ${BEFAST[letter].hint}.`, 'bad');
+  function tagFeedbackText(finding, letter) {
+    if (finding.befast === null) {
+      return 'This is supporting data — it does not document a BEFAST deficit.';
     }
+    return `This finding documents ${BEFAST[finding.befast].word} (${finding.befast}), not ${BEFAST[letter].word}.`;
+  }
+
+  function tryTag(findingId, letter) {
+    const f = findingById[findingId];
+    const correct = isTagCorrect(findingId, letter);
+    state.tags[findingId] = letter;
+    if (correct) {
+      toast(`✓ Correct — ${letter} · ${BEFAST[letter].word}.`, 'good');
+    } else if (f.befast === null) {
+      toast(`✗ Incorrect — supporting data is not a BEFAST deficit.`, 'bad');
+    } else {
+      toast(`✗ Incorrect — this documents ${BEFAST[f.befast].word} (${f.befast}), not ${BEFAST[letter].word}.`, 'bad');
+    }
+    renderTracker();
+    renderData();
+    renderMap();
+    if (state.selectedNode) renderPanel(state.selectedNode, false);
   }
 
   /* ----------------------------- stroke alert --------------------------- */
@@ -478,22 +503,26 @@
   alertBtn.addEventListener('click', evaluateAlert);
 
   function evaluateAlert() {
-    const tagged = taggedLetters();
+    const tagged = correctTaggedLetters();
     const deficits = LETTERS.filter((L) => L !== 'T' && tagged.has(L));
     const problems = [];
+    const wrongTags = incorrectTagCount();
 
     if (!tagged.has('T')) {
       problems.push('No <b>Time</b> evidence — a stroke alert without a last-known-well time can\'t drive treatment decisions. Someone witnessed the onset…');
     }
     if (deficits.length < CASE.alert.minDeficits) {
-      problems.push(`Only <b>${deficits.length}</b> BEFAST deficit${deficits.length === 1 ? '' : 's'} tagged (${deficits.join(', ') || 'none'}) — document at least <b>${CASE.alert.minDeficits}</b> objective deficits (B/E/F/A/S) to justify activation.`);
+      problems.push(`Only <b>${deficits.length}</b> BEFAST deficit${deficits.length === 1 ? '' : 's'} correctly tagged (${deficits.join(', ') || 'none'}) — document at least <b>${CASE.alert.minDeficits}</b> objective deficits (B/E/F/A/S) to justify activation.`);
+    }
+    if (wrongTags) {
+      problems.push(`You have <b>${wrongTags}</b> incorrect BEFAST tag${wrongTags === 1 ? '' : 's'} — only correctly tagged evidence counts toward activation.`);
     }
     CASE.alert.requiredNodes.forEach((nid) => {
       if (!state.discovered.has(nid)) {
         problems.push(`You haven\'t excluded the most common stroke mimic. There\'s a ten-second bedside test for it (<b>${CASE.nodes[nid].title}</b>).`);
       }
     });
-    const untaggedCount = state.findings.filter((id) => findingById[id].befast && !state.tags[id]).length;
+    const untaggedCount = state.findings.filter((id) => !state.tags[id]).length;
 
     if (problems.length === 0) {
       state.alerted = true;
@@ -513,13 +542,13 @@
 
   function showDebrief() {
     const total = Object.keys(CASE.nodes).length;
-    const tagged = taggedLetters();
+    const tagged = correctTaggedLetters();
     let html = '<h2 class="modal-title good">🚨 Stroke Alert Activated</h2>';
     CASE.debrief.success.forEach((p) => { html += `<p>${p}</p>`; });
     html += `<div class="debrief-stats">` +
       `<div><b>${state.discovered.size}</b>/${total} nodes explored</div>` +
       `<div><b>${state.findings.length}</b> findings collected</div>` +
-      `<div><b>${[...tagged].sort((a, b) => LETTERS.indexOf(a) - LETTERS.indexOf(b)).join(' · ')}</b> tagged</div>` +
+      `<div><b>${[...tagged].sort((a, b) => LETTERS.indexOf(a) - LETTERS.indexOf(b)).join(' · ')}</b> correctly tagged</div>` +
       `</div>`;
     showModal(html, [
       { label: 'Keep exploring', cls: '', fn: hideModal },

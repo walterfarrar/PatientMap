@@ -197,6 +197,11 @@ body { display: flex; flex-direction: column; }
   font-weight: 600;
   font-size: 12px;
 }
+.node-badge.incorrect circle {
+  fill: rgba(255, 93, 108, .15);
+  stroke: var(--red);
+}
+.node-badge.incorrect text { fill: var(--red); }
 
 /* --------------------------------- panel ------------------------------- */
 
@@ -285,6 +290,8 @@ body { display: flex; flex-direction: column; }
 .finding-detail { font-size: 12.5px; color: var(--text-dim); line-height: 1.5; }
 .finding-hint, .finding-tagged-as { font-size: 12px; margin-top: 7px; color: var(--text-dim); }
 .finding-tagged-as b { color: var(--teal); }
+.finding-tagged-as.incorrect b { color: var(--red); }
+.inline-finding.incorrect-tag { border-color: rgba(255, 93, 108, .35); background: rgba(255, 93, 108, .05); }
 
 .choices-heading, .data-heading {
   font-family: var(--font-mono);
@@ -326,10 +333,13 @@ body { display: flex; flex-direction: column; }
   border: 1px solid var(--line);
   border-radius: 10px;
 }
-.finding-card.tagged { border-color: rgba(47, 230, 168, .4); }
+.finding-card.tagged.correct { border-color: rgba(47, 230, 168, .4); }
+.finding-card.tagged.incorrect { border-color: rgba(255, 93, 108, .45); background: rgba(255, 93, 108, .04); }
 .finding-card.supporting { opacity: .85; }
 
 .tag-prompt { font-size: 12px; color: var(--amber); margin-top: 9px; }
+.tag-feedback { font-size: 12px; margin-top: 8px; line-height: 1.45; }
+.tag-feedback.incorrect { color: var(--red); }
 .tag-row { display: flex; gap: 6px; margin-top: 8px; }
 .tag-btn {
   flex: 1;
@@ -350,12 +360,19 @@ body { display: flex; flex-direction: column; }
   display: inline-block;
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--teal);
-  border: 1px solid rgba(47, 230, 168, .45);
-  background: rgba(47, 230, 168, .08);
   border-radius: 20px;
   padding: 2px 9px;
   margin-bottom: 7px;
+}
+.tag-chip.correct {
+  color: var(--teal);
+  border: 1px solid rgba(47, 230, 168, .45);
+  background: rgba(47, 230, 168, .08);
+}
+.tag-chip.incorrect {
+  color: var(--red);
+  border: 1px solid rgba(255, 93, 108, .5);
+  background: rgba(255, 93, 108, .08);
 }
 
 .shake { animation: shake .4s ease; }
