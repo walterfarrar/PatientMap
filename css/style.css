@@ -80,12 +80,11 @@ body { display: flex; flex-direction: column; }
 #phase-label { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; }
 
 #stroke-alert-btn {
-  margin-left: 14px;
-  padding: 11px 20px;
+  padding: 11px 16px;
   font-family: var(--font-mono);
   font-weight: 600;
   font-size: 14px;
-  letter-spacing: 1.5px;
+  letter-spacing: 1px;
   color: #ffd9dd;
   background: linear-gradient(180deg, #5d1320, #420a14);
   border: 1px solid #a32a3a;
@@ -93,6 +92,11 @@ body { display: flex; flex-direction: column; }
   cursor: pointer;
   transition: all .2s ease;
 }
+/* phase 1: occupies the BEFAST "T" row as the call-to-action */
+.befast-row.t-row { align-items: stretch; }
+.befast-row.t-row #stroke-alert-btn { flex: 1; min-height: 46px; }
+/* phase 2: full-width action under the SBAR board */
+#stroke-alert-btn.board-action { width: 100%; margin-top: 14px; }
 #stroke-alert-btn:hover {
   background: linear-gradient(180deg, #7e1a2b, #57101d);
   box-shadow: 0 0 22px rgba(255, 93, 108, .4);
@@ -220,7 +224,8 @@ body { display: flex; flex-direction: column; }
   position: absolute;
   left: 8px;
   bottom: 0;
-  max-height: 90%;
+  height: 100%;
+  max-height: 680px;
   width: auto;
   pointer-events: none;
   filter: drop-shadow(0 10px 24px rgba(0, 0, 0, .55));
@@ -386,7 +391,7 @@ body { display: flex; flex-direction: column; }
   border-radius: 10px;
 }
 #patient-thumb {
-  height: 78px;
+  height: 104px;
   width: auto;
   align-self: flex-end;
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, .5));
@@ -633,7 +638,6 @@ body { display: flex; flex-direction: column; }
   body { overflow: auto; }
   #topbar { flex-wrap: wrap; gap: 10px; }
   #topbar-hint { display: none; }
-  #stroke-alert-btn { margin-left: auto; }
   #layout { flex-direction: column; }
   #map-wrap { min-height: 52vh; }
   #convo { width: min(330px, 72%); }

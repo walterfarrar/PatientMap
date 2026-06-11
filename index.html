@@ -19,13 +19,9 @@
 
     <div id="topbar-hint">Tap a node · drag highlighted phrases into the chart</div>
 
-    <div id="clock" title="Simulated bedside time — every action costs minutes">
-      ⏱ <b id="clock-value">0</b> min · <span id="phase-label">recognition</span>
+    <div id="clock" title="Steps taken — each action you perform counts as one step">
+      👣 <b id="clock-value">0</b> steps · <span id="phase-label">recognition</span>
     </div>
-
-    <button id="stroke-alert-btn" type="button">
-      <span class="alert-icon">⚠</span> STROKE ALERT
-    </button>
   </header>
 
   <main id="layout">
@@ -57,6 +53,10 @@
       </div>
 
       <div id="befast-board"></div>
+
+      <button id="stroke-alert-btn" type="button">
+        <span class="alert-icon">⚠</span> STROKE ALERT
+      </button>
 
       <div id="notes-zone" class="drop-zone trash" data-zone="NOTES">
         <span class="trash-icon">🗒</span>

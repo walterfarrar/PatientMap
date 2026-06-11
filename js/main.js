@@ -18,10 +18,9 @@
   const TYPE_LABEL = {
     scene: 'Scene', dialogue: 'Dialogue', exam: 'Exam', test: 'Test',
   };
-  // simulated minutes each action costs when first performed
-  const TYPE_COST = { scene: 1, dialogue: 2, exam: 4, test: 5 };
-  const PENALTY_REJECTED_ALERT = 5;
-  const PENALTY_REJECTED_HANDOFF = 3;
+  // step penalties for premature / incomplete calls
+  const PENALTY_REJECTED_ALERT = 2;
+  const PENALTY_REJECTED_HANDOFF = 1;
 
   /* ----------------------------- chip registry -------------------------- */
 
@@ -44,8 +43,8 @@
 
   const state = {
     phase: 1,                 // 1 = BEFAST recognition, 2 = SBAR handoff
-    minutes: 0,               // simulated bedside clock
-    alertMinutes: null,       // clock value when the alert was accepted
+    steps: 0,                 // actions taken
+    alertSteps: null,         // step count when the alert was accepted
     discovered: new Set(),
     unlocked: new Set(),
     selectedNode: null,
@@ -135,14 +134,14 @@
 
   document.getElementById('convo-close').addEventListener('click', closeStage);
 
-  /* ------------------------------- clock -------------------------------- */
+  /* ------------------------------- steps -------------------------------- */
 
-  function addMinutes(n) {
-    state.minutes += n;
+  function addSteps(n) {
+    state.steps += n;
     renderClock();
   }
   function renderClock() {
-    clockEl.textContent = state.minutes;
+    clockEl.textContent = state.steps;
     phaseEl.textContent = state.phase === 1 ? 'recognition' : 'handoff prep';
   }
 
@@ -303,7 +302,7 @@
     if (first) {
       state.unlocked.delete(id);
       state.discovered.add(id);
-      addMinutes(TYPE_COST[CASE.nodes[id].type] || 2);
+      addSteps(1);
       (CASE.nodes[id].unlocks || []).forEach((c) => {
         if (state.discovered.has(c)) return;
         if ((CASE.nodes[c].phase || 1) > state.phase) return;  // phase-gated
@@ -373,7 +372,7 @@
         btn.className = 'choice-btn' + (done ? ' done' : '');
         btn.innerHTML = `<span class="choice-icon">${done ? child.icon : '?'}</span>` +
           `<span>${child.actionLabel}</span>` +
-          `<span class="choice-cost">${done ? '✓' : '+' + (TYPE_COST[child.type] || 2) + ' min'}</span>`;
+          `<span class="choice-cost">${done ? '✓' : ''}</span>`;
         btn.addEventListener('click', () => onNodeClick(cid));
         frag.appendChild(btn);
       });
@@ -411,7 +410,8 @@
   function renderBefastBoard() {
     panelTitle.textContent = 'Patient History & Notes';
     const correct = correctBefastLetters();
-    LETTERS.forEach((L) => {
+    // B/E/F/A/S are drop zones; T is the call-to-action (the alert button)
+    ['B', 'E', 'F', 'A', 'S'].forEach((L) => {
       const row = document.createElement('div');
       row.className = 'befast-row' + (correct.has(L) ? ' satisfied' : '');
       const letter = document.createElement('div');
@@ -421,6 +421,17 @@
       row.appendChild(zoneEl(L, BEFAST[L].hint));
       boardEl.appendChild(row);
     });
+
+    const trow = document.createElement('div');
+    trow.className = 'befast-row t-row';
+    trow.title = BEFAST.T.hint;
+    const tletter = document.createElement('div');
+    tletter.className = 'befast-letter';
+    tletter.innerHTML = `<span class="bl">T</span><span class="bw">${BEFAST.T.word}</span>`;
+    trow.appendChild(tletter);
+    alertBtn.className = '';
+    trow.appendChild(alertBtn);
+    boardEl.appendChild(trow);
   }
 
   function renderSbarBoard() {
@@ -455,6 +466,9 @@
       row.appendChild(zoneEl(L, SBAR[L].hint));
       boardEl.appendChild(row);
     });
+
+    alertBtn.className = 'handoff board-action';
+    boardEl.appendChild(alertBtn);
   }
 
   function zoneEl(L, hint) {
@@ -601,16 +615,16 @@
 
     if (!problems.length) { acceptAlert(); return; }
 
-    addMinutes(PENALTY_REJECTED_ALERT);
+    addSteps(PENALTY_REJECTED_ALERT);
     let html = '<h2 class="modal-title bad">⚠ Alert Not Accepted</h2>' +
       '<p>The stroke team pushes back — your activation needs stronger documentation:</p><ul>' +
       problems.map((p) => `<li>${p}</li>`).join('') + '</ul>' +
-      `<p class="modal-note">The false start cost <b>${PENALTY_REJECTED_ALERT} minutes</b>. Keep investigating — every node is revisitable.</p>`;
+      `<p class="modal-note">The false start cost <b>${PENALTY_REJECTED_ALERT} steps</b>. Keep investigating — every node is revisitable.</p>`;
     showModal(html, [{ label: 'Back to the patient', cls: '', fn: hideModal }]);
   }
 
   function acceptAlert() {
-    state.alertMinutes = state.minutes;
+    state.alertSteps = state.steps;
     state.phase = 2;
 
     // surface phase-2 nodes whose parent is already discovered
@@ -622,16 +636,15 @@
     });
 
     alertBtn.innerHTML = '<span class="alert-icon">📞</span> GIVE SBAR';
-    alertBtn.classList.add('handoff');
     renderClock();
     renderBoard();
     renderMap();
     if (state.selectedNode) openStage(state.selectedNode, true);
 
-    const s1 = stars(state.alertMinutes, CASE.scoring.alertStars);
+    const s1 = stars(state.alertSteps, CASE.scoring.alertSteps);
     const html =
       '<h2 class="modal-title good">🚨 Stroke Alert Activated</h2>' +
-      `<p>The stroke team accepts and mobilizes — <b>${state.alertMinutes} minutes</b> at the bedside. Recognition: <span class="stars">${starStr(s1)}</span></p>` +
+      `<p>The stroke team accepts and mobilizes — <b>${state.alertSteps} steps</b> at the bedside. Recognition: <span class="stars">${starStr(s1)}</span></p>` +
       '<p>Now the second half of the job: the neurologist will pick up in a moment and expects a clean <b>SBAR handoff</b>.</p>' +
       '<ul>' +
       '<li>The chart has switched to <b>S / B / A / R</b> — drag your collected evidence into it (a pool of everything you\'ve gathered is at the top).</li>' +
@@ -664,30 +677,30 @@
 
     if (!problems.length) { showFinalScorecard(); return; }
 
-    addMinutes(PENALTY_REJECTED_HANDOFF);
+    addSteps(PENALTY_REJECTED_HANDOFF);
     let html = '<h2 class="modal-title bad">📞 The Neurologist Interrupts</h2>' +
       '<p>"Hold on — I\'m missing things here:"</p><ul>' +
       problems.map((p) => `<li>${p}</li>`).join('') + '</ul>' +
-      `<p class="modal-note">The fumbled call cost <b>${PENALTY_REJECTED_HANDOFF} minutes</b>. Collect what\'s missing and call back.</p>`;
+      `<p class="modal-note">The fumbled call cost <b>${PENALTY_REJECTED_HANDOFF} step</b>. Collect what\'s missing and call back.</p>`;
     showModal(html, [{ label: 'Back to the patient', cls: '', fn: hideModal }]);
   }
 
   function showFinalScorecard() {
     const total = Object.keys(CASE.nodes).length;
-    const handoffTime = state.minutes - state.alertMinutes;
-    const s1 = stars(state.alertMinutes, CASE.scoring.alertStars);
-    const s2 = stars(handoffTime, CASE.scoring.handoffStars);
+    const handoffSteps = state.steps - state.alertSteps;
+    const s1 = stars(state.alertSteps, CASE.scoring.alertSteps);
+    const s2 = stars(handoffSteps, CASE.scoring.handoffSteps);
 
     let html = '<h2 class="modal-title good">🏁 Handoff Accepted — Case Complete</h2>' +
       '<div class="scorecard">' +
-      `<div class="score-row"><span class="stars">${starStr(s1)}</span><div><b>Recognition</b> — stroke alert accepted at <b>${state.alertMinutes} min</b></div></div>` +
-      `<div class="score-row"><span class="stars">${starStr(s2)}</span><div><b>Handoff</b> — SBAR delivered <b>${handoffTime} min</b> after the alert</div></div>` +
+      `<div class="score-row"><span class="stars">${starStr(s1)}</span><div><b>Recognition</b> — stroke alert accepted in <b>${state.alertSteps} steps</b></div></div>` +
+      `<div class="score-row"><span class="stars">${starStr(s2)}</span><div><b>Handoff</b> — SBAR delivered <b>${handoffSteps} steps</b> after the alert</div></div>` +
       '</div>';
     CASE.debrief.success.forEach((p) => { html += `<p>${p}</p>`; });
     html += `<div class="debrief-stats">` +
       `<div><b>${state.discovered.size}</b>/${total} nodes explored</div>` +
       `<div><b>${collectedChips().filter((c) => state.sbarPlacements[c.id]).length}</b> items in the SBAR</div>` +
-      `<div><b>${state.minutes}</b> total bedside minutes</div></div>`;
+      `<div><b>${state.steps}</b> total steps</div></div>`;
     showModal(html, [
       { label: 'Keep exploring', cls: '', fn: hideModal },
       { label: 'Restart case', cls: 'primary', fn: () => location.reload() },

@@ -34,8 +34,8 @@
  *   prompts          case-specific pushback text shown when criteria are unmet
  *
  * scoring:
- *   alertStars    [threeStarMax, twoStarMax] — bedside minutes at accepted alert
- *   handoffStars  [threeStarMax, twoStarMax] — minutes from alert to accepted handoff
+ *   alertSteps    [threeStarMax, twoStarMax] — steps taken at accepted alert
+ *   handoffSteps  [threeStarMax, twoStarMax] — steps from alert to accepted handoff
  */
 
 const CASE_BEFAST_INFO = {
@@ -44,7 +44,7 @@ const CASE_BEFAST_INFO = {
   F: { word: 'Face', hint: 'Facial asymmetry / droop' },
   A: { word: 'Arms', hint: 'Unilateral arm weakness or drift' },
   S: { word: 'Speech', hint: 'Slurred speech, aphasia, or word-finding difficulty' },
-  T: { word: 'Time', hint: 'Last known well time established' },
+  T: { word: 'Time', hint: 'Time to call 911 — this is the trigger to activate, not a data field' },
 };
 
 const CASE_SBAR_INFO = {
@@ -65,13 +65,14 @@ const CASE_001 = {
     portrait: 'assets/patient.png',
   },
 
-  // Stroke Alert criteria (phase 1)
+  // Stroke Alert criteria (phase 1).  "T" is the trigger to activate (the
+  // STROKE ALERT button itself), not a data slot — so no last-known-well is
+  // required to call. You call on the deficit; LKW is handoff data.
   alert: {
-    requiredLetters: ['T'],
+    requiredLetters: [],
     minDeficits: 1,
     requiredNodes: ['vf_test'],
     prompts: {
-      T: 'You haven\'t filed a <b>Time</b> / last-known-well. Drag the line where he says when he was last normal into the <b>T</b> box.',
       deficits: 'No objective BEFAST deficit is correctly filed yet. In this patient it\'s subtle — the deficit is in the <b>Eyes</b> (a right visual field cut).',
       nodes: {
         vf_test: 'You haven\'t confirmed the deficit objectively at the bedside — perform <b>Confrontation Visual Field Testing</b>.',
@@ -80,15 +81,15 @@ const CASE_001 = {
   },
 
   scoring: {
-    alertStars: [14, 26],     // optimal beeline ≈ 11 simulated minutes
-    handoffStars: [26, 42],   // optimal collection sweep ≈ 21 minutes
+    alertSteps: [5, 8],       // optimal decisive beeline ≈ 4 steps
+    handoffSteps: [10, 15],   // optimal collection sweep ≈ 9 steps
   },
 
   debrief: {
     success: [
       'Mateo D., a 20-year-old college student, presented with a sudden right homonymous hemianopia and a mild headache. Covering either eye didn\'t change the deficit and it respects the vertical midline — localizing it behind the optic chiasm, to the LEFT occipital cortex / optic radiations.',
       'This is exactly the stroke a plain FAST screen misses: no facial droop, no arm weakness, no slurred speech. Only the "B" and "E" of BEFAST catch it — and here the "bumping into people" was never a balance problem (gait and vestibular function were intact); it was the visual field loss itself.',
-      'A confirmed homonymous hemianopia is a decisive sign: with a last-known-well, that single finding justifies activation. You don\'t need to finish the interview before calling — time is brain.',
+      'A confirmed homonymous hemianopia is a decisive sign — that single finding justifies activation. The "T" in BEFAST is the call to action: time to activate, not another box of data to fill. You don\'t need to finish the interview before calling — time is brain.',
       'But the alert isn\'t the end of the job. The team that takes him needs vitals, glucose (his skipped breakfast made hypoglycemia a real mimic), meds, allergies, and last oral intake — the SBAR is what makes your fast recognition usable downstream.',
       'Last known well was the night before, an unclear/wake-up onset — which complicates IV thrombolysis but does NOT exclude thrombectomy or imaging-guided treatment.',
     ],
@@ -334,10 +335,10 @@ const CASE_001 = {
       ],
       chips: [
         {
-          text: 'Last night before I went to sleep', befast: 'T', sbar: 'S',
+          text: 'Last night before I went to sleep', befast: null, sbar: 'S',
           required: true,
           gap: 'When was he last known well? The whole treatment window hangs on it.',
-          note: 'The last-known-well — the single most important time point for treatment.',
+          note: 'The last-known-well — not a deficit you tag, but the single most important time point for the handoff.',
         },
       ],
       unlocks: [],
