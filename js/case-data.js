@@ -5,23 +5,37 @@
  *   id        unique string
  *   title     short label shown on the map
  *   icon      emoji shown inside the node once discovered
- *   type      'scene' | 'dialogue' | 'exam' | 'test'
+ *   type      'scene' | 'dialogue' | 'exam' | 'test'  (drives time cost)
+ *   phase     optional; 2 = node only becomes available after the Stroke Alert
  *   actionLabel  text shown on the locked node / button ("Ask about onset")
  *   content   array of blocks: { kind: 'narrate'|'patient'|'family'|'result', text }
- *   chips     array of draggable evidence phrases the player drags into BEFAST:
- *               { text, befast, note }
- *             - `text` MUST appear verbatim inside one of this node's content
- *               blocks; it gets highlighted and becomes draggable.
- *             - `befast` is 'B'|'E'|'F'|'A'|'S'|'T' for real evidence, or null
- *               for a distractor (correct home is the Distractors trash).
- *             - `note` (optional) is shown as feedback once placed.
+ *   chips     array of draggable evidence phrases:
+ *               { text, befast, sbar, decisive, required, gap, note }
+ *             - `text` MUST appear verbatim inside one of this node's
+ *               patient/family/result content blocks; it gets highlighted
+ *               and becomes draggable. (narrate blocks are never chip hosts)
+ *             - `befast`  'B'|'E'|'F'|'A'|'S'|'T' for a real deficit, or null
+ *               (its phase-1 home is the Clinical Notes pile).
+ *             - `sbar`    'S'|'B'|'A'|'R' = where it belongs in the phase-2
+ *               SBAR handoff, or null (stays in Clinical Notes).
+ *             - `decisive` true = this single finding justifies activation
+ *               on its own (with Time) — the "sure-fire" sign.
+ *             - `required` true = the handoff is not accepted without it.
+ *             - `gap`     what the receiving nurse asks if it's missing.
+ *             - `note`    feedback shown in toasts once placed.
  *   unlocks   array of child node ids revealed after visiting this node
  *
- * alert criteria:
+ * alert criteria (phase 1):
  *   requiredLetters  letters that must have correctly-placed evidence
  *   minDeficits      minimum correctly-placed deficits among B/E/F/A/S
- *   requiredNodes    node ids that must be discovered before activation
+ *                    (the accumulation path; a correctly-placed `decisive`
+ *                    chip bypasses it)
+ *   requiredNodes    node ids that must be discovered for the accumulation path
  *   prompts          case-specific pushback text shown when criteria are unmet
+ *
+ * scoring:
+ *   alertStars    [threeStarMax, twoStarMax] — bedside minutes at accepted alert
+ *   handoffStars  [threeStarMax, twoStarMax] — minutes from alert to accepted handoff
  */
 
 const CASE_BEFAST_INFO = {
@@ -31,6 +45,13 @@ const CASE_BEFAST_INFO = {
   A: { word: 'Arms', hint: 'Unilateral arm weakness or drift' },
   S: { word: 'Speech', hint: 'Slurred speech, aphasia, or word-finding difficulty' },
   T: { word: 'Time', hint: 'Last known well time established' },
+};
+
+const CASE_SBAR_INFO = {
+  S: { word: 'Situation', hint: 'Who the patient is, what happened, and when' },
+  B: { word: 'Background', hint: 'History, meds, allergies, last intake' },
+  A: { word: 'Assessment', hint: 'Objective findings: exam, vitals, glucose, your read' },
+  R: { word: 'Recommendation', hint: 'What needs to happen next' },
 };
 
 const CASE_001 = {
@@ -44,11 +65,11 @@ const CASE_001 = {
     portrait: 'assets/patient.png',
   },
 
-  // Stroke Alert criteria
+  // Stroke Alert criteria (phase 1)
   alert: {
-    requiredLetters: ['T'],          // last-known-well must be placed correctly
-    minDeficits: 1,                  // at least one correct B/E/F/A/S (here: E)
-    requiredNodes: ['vf_test'],      // objective field defect must be confirmed
+    requiredLetters: ['T'],
+    minDeficits: 1,
+    requiredNodes: ['vf_test'],
     prompts: {
       T: 'You haven\'t filed a <b>Time</b> / last-known-well. Drag the line where he says when he was last normal into the <b>T</b> box.',
       deficits: 'No objective BEFAST deficit is correctly filed yet. In this patient it\'s subtle — the deficit is in the <b>Eyes</b> (a right visual field cut).',
@@ -58,13 +79,18 @@ const CASE_001 = {
     },
   },
 
+  scoring: {
+    alertStars: [14, 26],     // optimal beeline ≈ 11 simulated minutes
+    handoffStars: [26, 42],   // optimal collection sweep ≈ 21 minutes
+  },
+
   debrief: {
     success: [
-      'STROKE ALERT ACTIVATED — the stroke team is mobilizing and the patient is headed for emergent imaging (CT/CTA, then MRI).',
       'Mateo D., a 20-year-old college student, presented with a sudden right homonymous hemianopia and a mild headache. Covering either eye didn\'t change the deficit and it respects the vertical midline — localizing it behind the optic chiasm, to the LEFT occipital cortex / optic radiations.',
       'This is exactly the stroke a plain FAST screen misses: no facial droop, no arm weakness, no slurred speech. Only the "B" and "E" of BEFAST catch it — and here the "bumping into people" was never a balance problem (gait and vestibular function were intact); it was the visual field loss itself.',
-      'His youth is a trap. Stroke in young adults is uncommon but real — dissection, cardioembolism, hypercoagulable states, vasculitis, illicit drugs — and a family history of stroke is a clue. Dismissing this as a migraine, the tempting mimic, would have burned the treatment window.',
-      'Last known well was the night before, an unclear/wake-up onset — which complicates IV thrombolysis but does NOT exclude thrombectomy or imaging-guided treatment. Time is brain: recognizing the deficit and calling the alert was the whole job.',
+      'A confirmed homonymous hemianopia is a decisive sign: with a last-known-well, that single finding justifies activation. You don\'t need to finish the interview before calling — time is brain.',
+      'But the alert isn\'t the end of the job. The team that takes him needs vitals, glucose (his skipped breakfast made hypoglycemia a real mimic), meds, allergies, and last oral intake — the SBAR is what makes your fast recognition usable downstream.',
+      'Last known well was the night before, an unclear/wake-up onset — which complicates IV thrombolysis but does NOT exclude thrombectomy or imaging-guided treatment.',
     ],
   },
 
@@ -82,13 +108,13 @@ const CASE_001 = {
         { kind: 'narrate', text: '"I\'m sorry to hear that. What\'s going on?"' },
         { kind: 'patient', text: '"This morning I woke up with an annoying headache. I went to class anyway, and during the lecture everything started looking funny. It got real hard to see things."' },
         { kind: 'patient', text: '"After class I headed to my girlfriend\'s room but kept bumping into people on the way. She freaked out and made me come see you."' },
-        { kind: 'narrate', text: 'Highlighted phrases can be dragged into the BEFAST chart. Where would you like to begin?' },
+        { kind: 'narrate', text: 'Highlighted phrases can be dragged into the chart. Where would you like to begin?' },
       ],
       chips: [
-        { text: 'hard to see things', befast: 'E', note: 'A vision complaint — the heart of this case. Belongs under Eyes.' },
-        { text: 'annoying headache', befast: null, note: 'Headache is nonspecific context — not one of the BEFAST letters. Into the Distractors.' },
+        { text: 'hard to see things', befast: 'E', sbar: 'S', note: 'A vision complaint — the heart of this case.' },
+        { text: 'annoying headache', befast: null, sbar: 'S', note: 'Not a BEFAST deficit — but it IS part of the presenting situation at handoff.' },
       ],
-      unlocks: ['vision_topic', 'walking_topic', 'headache_topic', 'lkw_topic', 'general_topic', 'history_topic'],
+      unlocks: ['vision_topic', 'walking_topic', 'headache_topic', 'lkw_topic', 'general_topic', 'history_topic', 'plan_node'],
     },
 
     /* ------------------------------- VISION -------------------------------- */
@@ -105,8 +131,8 @@ const CASE_001 = {
         { kind: 'narrate', text: 'Drill into the character of the visual loss.' },
       ],
       chips: [
-        { text: 'hard to see things on my right', befast: 'E', note: 'Lateralized visual loss — Eyes.' },
-        { text: 'allergies', befast: null, note: 'The patient\'s own guess, and a red herring. Distractor.' },
+        { text: 'hard to see things on my right', befast: 'E', sbar: 'S', note: 'Lateralized visual loss — Eyes.' },
+        { text: 'allergies', befast: null, sbar: null, note: 'The patient\'s own guess, and a red herring in both phases. Clinical Notes.' },
       ],
       unlocks: ['v_describe', 'v_oneboth', 'v_characterize', 'v_painred', 'onset_topic'],
     },
@@ -121,10 +147,10 @@ const CASE_001 = {
         { kind: 'narrate', text: '"Can you explain what you mean by it being hard to see things on your right?"' },
         { kind: 'patient', text: '"Things on my right just aren\'t there, or they\'re super blurry, like walking around with one eye closed."' },
         { kind: 'patient', text: '"When I was taking notes I couldn\'t see my right hand or the keys on the right side of the keyboard. I knocked my phone right off the table and never even saw it fall."' },
-        { kind: 'result', text: 'He consistently misses objects in the right half of his world — the history of a right homonymous visual field defect, i.e. neglect of one side of space from a lesion in the opposite (left) hemisphere\'s visual pathway.' },
+        { kind: 'result', text: 'He consistently misses objects in the right half of his world — the history of a right homonymous visual field defect, i.e. loss of one side of space from a lesion in the opposite (left) hemisphere\'s visual pathway.' },
       ],
       chips: [
-        { text: 'keys on the right side of the keyboard', befast: 'E', note: 'Missing the right half of space — a right field cut. Eyes.' },
+        { text: 'keys on the right side of the keyboard', befast: 'E', sbar: 'S', note: 'Missing the right half of space — a right field cut.' },
       ],
       unlocks: ['vf_test'],
     },
@@ -138,10 +164,15 @@ const CASE_001 = {
       content: [
         { kind: 'narrate', text: 'You sit facing him, have him fixate on your nose, and bring wiggling fingers in from each quadrant, then repeat covering one eye at a time.' },
         { kind: 'result', text: 'Dense field loss to the RIGHT in both eyes, sharply respecting the vertical midline, identical whether the right or left eye is covered: a right homonymous hemianopia.' },
-        { kind: 'narrate', text: 'This localizes to the left retrochiasmal visual pathway (optic radiation / occipital cortex) — the brain, not the eye.' },
+        { kind: 'narrate', text: 'This localizes to the left retrochiasmal visual pathway (optic radiation / occipital cortex) — the brain, not the eye. A decisive sign: with a last-known-well, this alone justifies activation.' },
       ],
       chips: [
-        { text: 'right homonymous hemianopia', befast: 'E', note: 'The objective, reproducible field cut. The strongest Eyes evidence and the finding that justifies activation.' },
+        {
+          text: 'right homonymous hemianopia', befast: 'E', sbar: 'A',
+          decisive: true, required: true,
+          gap: 'What exactly did your exam find? They need the objective deficit, not just "vision trouble."',
+          note: 'The objective, reproducible field cut — a decisive sign that justifies activation on its own.',
+        },
       ],
       unlocks: [],
     },
@@ -158,7 +189,7 @@ const CASE_001 = {
         { kind: 'result', text: 'The deficit is present in both eyes and unchanged by covering either one — it is homonymous (the same side of the field in both eyes), pointing behind the optic chiasm, to the brain, and away from a monocular eye cause.' },
       ],
       chips: [
-        { text: 'no matter which eye is covered', befast: 'E', note: 'Homonymous (both eyes) field loss localizes to the brain. Eyes.' },
+        { text: 'no matter which eye is covered', befast: 'E', sbar: 'A', note: 'Homonymous (both eyes) field loss localizes to the brain.' },
       ],
       unlocks: [],
     },
@@ -175,7 +206,7 @@ const CASE_001 = {
         { kind: 'result', text: 'No positive phenomena (against migrainous aura), no movement (against migraine\'s marching scintillations), and no curtain/altitudinal pattern (against a retinal/vascular eye event). A fixed, negative field loss fits a cortical stroke.' },
       ],
       chips: [
-        { text: 'no flashes, no floaters', befast: null, note: 'A useful negative that argues against migraine and retinal causes — but it is not itself a BEFAST deficit. Distractor.' },
+        { text: 'no flashes, no floaters', befast: null, sbar: 'A', note: 'A pertinent negative that argues against migraine — assessment material, not a deficit.' },
       ],
       unlocks: [],
     },
@@ -192,7 +223,7 @@ const CASE_001 = {
         { kind: 'result', text: 'Painless visual loss without injection makes acute glaucoma, optic neuritis, and other primary eye pathology unlikely.' },
       ],
       chips: [
-        { text: 'None of that', befast: null, note: 'Absence of eye pain rules out ocular causes — supporting context, not a BEFAST letter. Distractor.' },
+        { text: 'None of that', befast: null, sbar: null, note: 'Helps you exclude eye pathology at the bedside, but adds nothing to the handoff. Clinical Notes.' },
       ],
       unlocks: [],
     },
@@ -209,7 +240,7 @@ const CASE_001 = {
         { kind: 'result', text: 'An abrupt, "switch-flipped" onset is characteristic of a vascular (stroke) event. Note: this is when it was NOTICED — last known well must be pinned down separately.' },
       ],
       chips: [
-        { text: 'between 10 and 11', befast: null, note: 'Tempting to file under Time — but this is when he NOTICED the deficit, not the last-known-well. Distractor.' },
+        { text: 'between 10 and 11', befast: null, sbar: 'S', note: 'Not the last-known-well — but when symptoms were noticed IS part of the situation at handoff.' },
       ],
       unlocks: [],
     },
@@ -229,8 +260,8 @@ const CASE_001 = {
         { kind: 'result', text: 'Key distinction: the bumping is driven by the right visual field loss, NOT by ataxia or vertigo. Balance and vestibular function are intact — this is an Eyes finding, not a Balance finding.' },
       ],
       chips: [
-        { text: 'bumping into people', befast: 'E', note: 'A trap! It looks like Balance, but he bumps into things he cannot SEE on the right. This is Eyes, not Balance.' },
-        { text: 'balance feels fine', befast: null, note: 'Normal balance actively argues AGAINST a "B" deficit. Distractor.' },
+        { text: 'bumping into people', befast: 'E', sbar: 'S', note: 'A trap! It looks like Balance, but he bumps into things he cannot SEE on the right. This is Eyes, not Balance.' },
+        { text: 'balance feels fine', befast: null, sbar: null, note: 'Normal balance actively argues AGAINST a "B" deficit. Clinical Notes.' },
       ],
       unlocks: [],
     },
@@ -249,7 +280,7 @@ const CASE_001 = {
         { kind: 'result', text: 'A mild bilateral throbbing headache. Headache can accompany posterior-circulation strokes but is nonspecific; it is not itself a BEFAST deficit.' },
       ],
       chips: [
-        { text: 'throbbing ache', befast: null, note: 'Headache is nonspecific and is not a BEFAST letter. Distractor.' },
+        { text: 'throbbing ache', befast: null, sbar: 'S', note: 'Nonspecific for BEFAST, but part of the presenting picture for handoff.' },
       ],
       unlocks: ['h_onset', 'h_severity'],
     },
@@ -266,7 +297,7 @@ const CASE_001 = {
         { kind: 'result', text: 'Headache began around or after waking and was absent the night before — consistent with an acute event this morning.' },
       ],
       chips: [
-        { text: 'Woke up about 9:30', befast: null, note: 'A time, but the time he WOKE — not the last-known-well for the deficit. Distractor.' },
+        { text: 'Woke up about 9:30', befast: null, sbar: 'S', note: 'A time, but the time he WOKE — not the last-known-well. Still timeline data for the handoff.' },
       ],
       unlocks: [],
     },
@@ -283,7 +314,7 @@ const CASE_001 = {
         { kind: 'result', text: 'A low-severity, non-thunderclap headache — less concerning for subarachnoid hemorrhage, though imaging remains essential. Low severity does not exclude stroke.' },
       ],
       chips: [
-        { text: 'Probably a 2', befast: null, note: 'Pain score is supporting detail, not a BEFAST letter. Distractor.' },
+        { text: 'Probably a 2', befast: null, sbar: 'S', note: 'Pain score — supporting situation detail at handoff.' },
       ],
       unlocks: [],
     },
@@ -302,7 +333,12 @@ const CASE_001 = {
         { kind: 'result', text: 'Last known well: the night before, prior to sleep. Because he can\'t confirm normal vision between waking and the onset in class, the conservative last-known-well is set to last night — an unclear/"wake-up" onset that still warrants emergent imaging.' },
       ],
       chips: [
-        { text: 'Last night before I went to sleep', befast: 'T', note: 'The last-known-well — the single most important time point for treatment. This is the Time evidence.' },
+        {
+          text: 'Last night before I went to sleep', befast: 'T', sbar: 'S',
+          required: true,
+          gap: 'When was he last known well? The whole treatment window hangs on it.',
+          note: 'The last-known-well — the single most important time point for treatment.',
+        },
       ],
       unlocks: [],
     },
@@ -317,10 +353,10 @@ const CASE_001 = {
       actionLabel: 'Cover general background',
       content: [
         { kind: 'narrate', text: '"Let\'s cover some general background."' },
-        { kind: 'narrate', text: 'Ask about medications and allergies.' },
+        { kind: 'narrate', text: 'Ask about medications and allergies, and get a set of vitals.' },
       ],
       chips: [],
-      unlocks: ['g_medication', 'g_allergies'],
+      unlocks: ['g_medication', 'g_allergies', 'obtain_vitals'],
     },
 
     g_medication: {
@@ -332,10 +368,15 @@ const CASE_001 = {
       content: [
         { kind: 'narrate', text: '"Are you currently on any medications?"' },
         { kind: 'patient', text: '"No medications, none at all."' },
-        { kind: 'result', text: 'No anticoagulants or other agents on board — relevant to treatment eligibility.' },
+        { kind: 'result', text: 'No anticoagulants or other agents on board — directly relevant to thrombolysis eligibility.' },
       ],
       chips: [
-        { text: 'No medications', befast: null, note: 'Relevant to treatment planning, but not a BEFAST deficit. Distractor.' },
+        {
+          text: 'No medications', befast: null, sbar: 'B',
+          required: true,
+          gap: 'Is he on any medications — anticoagulants especially? It changes thrombolysis eligibility.',
+          note: 'Treatment-critical background, not a BEFAST deficit.',
+        },
       ],
       unlocks: [],
     },
@@ -352,7 +393,54 @@ const CASE_001 = {
         { kind: 'result', text: 'A single remote reaction to isotretinoin. Worth documenting for drug safety; not relevant to today\'s field cut.' },
       ],
       chips: [
-        { text: 'isotretinoin', befast: null, note: 'An allergy worth charting, but unrelated to the stroke. Distractor.' },
+        {
+          text: 'isotretinoin', befast: null, sbar: 'B',
+          required: true,
+          gap: 'Any allergies? They\'re about to give this man drugs and contrast.',
+          note: 'Drug-safety background for the handoff.',
+        },
+      ],
+      unlocks: [],
+    },
+
+    obtain_vitals: {
+      id: 'obtain_vitals',
+      title: 'Vital Signs',
+      icon: '🩺',
+      type: 'test',
+      actionLabel: 'Obtain a full set of vitals',
+      content: [
+        { kind: 'narrate', text: 'You cycle the monitor and run a full set of vitals.' },
+        { kind: 'result', text: 'BP 128/82, HR 74 and regular, RR 14, SpO2 99% on room air, T 37.0 °C. Hemodynamically stable; the regular rhythm makes atrial fibrillation less likely on this strip.' },
+      ],
+      chips: [
+        {
+          text: 'BP 128/82, HR 74', befast: null, sbar: 'A',
+          required: true,
+          gap: 'What are his vitals? Nobody accepts a stroke handoff without them.',
+          note: 'Stable vitals — core objective data for the handoff.',
+        },
+      ],
+      unlocks: ['glucose_test'],
+    },
+
+    glucose_test: {
+      id: 'glucose_test',
+      title: 'POC Glucose',
+      icon: '🩸',
+      type: 'test',
+      actionLabel: 'Check a point-of-care glucose',
+      content: [
+        { kind: 'narrate', text: 'A quick fingerstick — he mentioned skipping breakfast, and hypoglycemia is the classic stroke mimic.' },
+        { kind: 'result', text: 'Point-of-care glucose: 96 mg/dL. Hypoglycemia is excluded as the cause of the deficit.' },
+      ],
+      chips: [
+        {
+          text: 'glucose: 96 mg/dL', befast: null, sbar: 'A',
+          required: true,
+          gap: 'Did you rule out hypoglycemia? They\'ll want the glucose before anything else.',
+          note: 'Mimic excluded — essential assessment data.',
+        },
       ],
       unlocks: [],
     },
@@ -371,7 +459,7 @@ const CASE_001 = {
         { kind: 'result', text: 'No trauma and no seizure history makes a post-traumatic or postictal (Todd\'s phenomenon) explanation for the deficit unlikely.' },
       ],
       chips: [
-        { text: 'never had a seizure', befast: null, note: 'Helps exclude a postictal mimic, but is not a BEFAST deficit. Distractor.' },
+        { text: 'never had a seizure', befast: null, sbar: 'B', note: 'Excludes a postictal mimic — background for the handoff.' },
       ],
       unlocks: ['h_intake'],
     },
@@ -385,10 +473,40 @@ const CASE_001 = {
       content: [
         { kind: 'narrate', text: '"When did you last have something to eat or drink?"' },
         { kind: 'patient', text: '"Had a banana on the way to class, and some tea earlier."' },
-        { kind: 'result', text: 'Recent oral intake noted — useful for procedural planning, and makes profound hypoglycemia less likely (though a glucose should still be checked).' },
+        { kind: 'result', text: 'Recent oral intake noted — needed for procedural and airway planning downstream.' },
       ],
       chips: [
-        { text: 'banana', befast: null, note: 'Last oral intake matters for procedures, but it is not a BEFAST deficit. Distractor.' },
+        {
+          text: 'banana', befast: null, sbar: 'B',
+          required: true,
+          gap: 'When did he last eat or drink? Procedures and swallow screening depend on it.',
+          note: 'Last oral intake — procedural planning data.',
+        },
+      ],
+      unlocks: [],
+    },
+
+    /* --------------------------- PHASE 2: THE PLAN ------------------------- */
+
+    plan_node: {
+      id: 'plan_node',
+      title: 'Formulate the Plan',
+      icon: '📞',
+      type: 'scene',
+      phase: 2,
+      actionLabel: 'Formulate your recommendation',
+      content: [
+        { kind: 'narrate', text: 'The stroke team is mobilizing. Before you pick up the phone, you set the plan in your head.' },
+        { kind: 'result', text: 'Recommendation: emergent CT and CTA on arrival, then MRI as indicated. Until imaging and a swallow screen: keep him NPO, frequent neuro checks.' },
+      ],
+      chips: [
+        {
+          text: 'emergent CT and CTA', befast: null, sbar: 'R',
+          required: true,
+          gap: 'What do you actually want done next? A handoff without a recommendation isn\'t a handoff.',
+          note: 'The core recommendation — emergent vascular imaging.',
+        },
+        { text: 'keep him NPO', befast: null, sbar: 'R', note: 'Good catch — aspiration safety until a swallow screen.' },
       ],
       unlocks: [],
     },

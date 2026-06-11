@@ -19,6 +19,10 @@
 
     <div id="topbar-hint">Tap a node · drag highlighted phrases into the chart</div>
 
+    <div id="clock" title="Simulated bedside time — every action costs minutes">
+      ⏱ <b id="clock-value">0</b> min · <span id="phase-label">recognition</span>
+    </div>
+
     <button id="stroke-alert-btn" type="button">
       <span class="alert-icon">⚠</span> STROKE ALERT
     </button>
@@ -40,7 +44,7 @@
     </section>
 
     <aside id="panel">
-      <h2 class="panel-title">Patient History &amp; Notes</h2>
+      <h2 class="panel-title" id="panel-title">Patient History &amp; Notes</h2>
 
       <div id="patient-card">
         <img id="patient-thumb" alt="" />
@@ -54,10 +58,10 @@
 
       <div id="befast-board"></div>
 
-      <div id="trash-zone" class="drop-zone trash" data-zone="TRASH">
-        <span class="trash-icon">🗑</span>
+      <div id="notes-zone" class="drop-zone trash" data-zone="NOTES">
+        <span class="trash-icon">🗒</span>
         <div class="trash-body">
-          <div class="trash-title">Distractors</div>
+          <div class="trash-title">Clinical Notes <span class="trash-sub">— context, not chart evidence</span></div>
           <div class="zone-chips"></div>
         </div>
       </div>
