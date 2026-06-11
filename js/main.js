@@ -138,9 +138,35 @@
     })(t0);
   }
 
+  function isNodeTarget(el) {
+    while (el && el !== svg) {
+      if (el.classList && el.classList.contains('node')) return true;
+      el = el.parentNode;
+    }
+    return false;
+  }
+
+  function attachNodePointer(g, id) {
+    let down = null;
+    g.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      down = { x: e.clientX, y: e.clientY };
+    });
+    g.addEventListener('pointerup', (e) => {
+      e.stopPropagation();
+      if (!down) return;
+      const moved = Math.abs(e.clientX - down.x) + Math.abs(e.clientY - down.y);
+      down = null;
+      if (moved <= 8) onNodeClick(id);
+    });
+    g.addEventListener('pointercancel', () => { down = null; });
+  }
+
   let dragging = false, dragStart = null, dragMoved = false;
   svg.addEventListener('pointerdown', (e) => {
-    dragging = true; dragMoved = false;
+    if (isNodeTarget(e.target)) return;
+    dragging = true;
+    dragMoved = false;
     dragStart = { px: e.clientX, py: e.clientY, vx: view.x, vy: view.y };
     svg.setPointerCapture(e.pointerId);
   });
@@ -157,7 +183,12 @@
       applyView();
     }
   });
-  svg.addEventListener('pointerup', () => { dragging = false; });
+  svg.addEventListener('pointerup', (e) => {
+    if (!dragging) return;
+    dragging = false;
+    dragMoved = false;
+    if (svg.hasPointerCapture(e.pointerId)) svg.releasePointerCapture(e.pointerId);
+  });
   svg.addEventListener('wheel', (e) => {
     e.preventDefault();
     if (viewAnim) cancelAnimationFrame(viewAnim);
@@ -207,6 +238,11 @@
       g.setAttribute('class', cls);
       g.setAttribute('transform', `translate(${pos.x}, ${pos.y})`);
 
+      const hit = document.createElementNS(SVG_NS, 'circle');
+      hit.setAttribute('r', 48);
+      hit.setAttribute('class', 'node-hit');
+      g.appendChild(hit);
+
       const halo = document.createElementNS(SVG_NS, 'circle');
       halo.setAttribute('r', 38);
       halo.setAttribute('class', 'node-halo');
@@ -246,7 +282,7 @@
         g.appendChild(badge);
       }
 
-      g.addEventListener('click', () => { if (!dragMoved) onNodeClick(id); });
+      attachNodePointer(g, id);
       nodeLayer.appendChild(g);
     });
   }

@@ -147,6 +147,7 @@ body { display: flex; flex-direction: column; }
 }
 
 .node { cursor: pointer; }
+.node-hit { fill: rgba(0, 0, 0, 0.001); stroke: none; pointer-events: all; }
 
 .node-halo { fill: transparent; transition: fill .25s ease; }
 .node:hover .node-halo { fill: rgba(54, 214, 231, .07); }
